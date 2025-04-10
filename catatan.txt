@@ -1,0 +1,1469 @@
+# Airline Ticket Booking System Implementation in Laravel 12
+
+## 1. Project Setup
+
+### Create Laravel Project
+```bash
+composer create-project laravel/laravel airline
+cd airline
+```
+
+### Database Configuration
+1. Create MySQL database named `airline_ticket_db`
+2. Update `.env` file:
+```env
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=airline_ticket_db
+DB_USERNAME=root
+DB_PASSWORD=
+```
+
+## 2. Database Migrations
+
+### Create Flights Migration
+```bash
+php artisan make:migration create_flights_table
+```
+
+```php
+// database/migrations/YYYY_MM_DD_create_flights_table.php
+Schema::create('flights', function (Blueprint $table) {
+    $table->id();
+    $table->string('flight_code', 5)->unique();
+    $table->string('origin', 3);
+    $table->string('destination', 3);
+    $table->dateTime('departure_time');
+    $table->dateTime('arrival_time');
+    $table->timestamps();
+});
+```
+
+### Create Tickets Migration
+```bash
+php artisan make:migration create_tickets_table
+```
+
+```php
+// database/migrations/YYYY_MM_DD_create_tickets_table.php
+Schema::create('tickets', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('flight_id')->constrained();
+    $table->string('passenger_name');
+    $table->string('passenger_phone', 14);
+    $table->string('seat_number', 3);
+    $table->boolean('is_boarding')->default(false);
+    $table->dateTime('boarding_time')->nullable();
+    $table->timestamps();
+});
+```
+
+Run migrations:
+```bash
+php artisan migrate
+```
+
+## 3. Models and Relations
+
+### Flight Model
+```bash
+php artisan make:model Flight
+```
+
+```php
+// app/Models/Flight.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Flight extends Model
+{
+    protected $fillable = [
+        'flight_code', 
+        'origin', 
+        'destination', 
+        'departure_time', 
+        'arrival_time'
+    ];
+
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(Ticket::class);
+    }
+}
+```
+
+### Ticket Model
+```bash
+php artisan make:model Ticket
+```
+
+```php
+// app/Models/Ticket.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Ticket extends Model
+{
+    protected $fillable = [
+        'flight_id',
+        'passenger_name',
+        'passenger_phone',
+        'seat_number',
+        'is_boarding',
+        'boarding_time'
+    ];
+
+    public function flight(): BelongsTo
+    {
+        return $this->belongsTo(Flight::class);
+    }
+}
+```
+
+## 4. Database Seeder
+
+### Flight Seeder
+```bash
+php artisan make:seeder FlightSeeder
+```
+
+```php
+// database/seeders/FlightSeeder.php
+namespace Database\Seeders;
+
+use App\Models\Flight;
+use Illuminate\Database\Seeder;
+use Carbon\Carbon;
+
+class FlightSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $flights = [
+            [
+                'flight_code' => 'JT610',
+                'origin' => 'SUB',
+                'destination' => 'CGK',
+                'departure_time' => Carbon::now()->addDays(1),
+                'arrival_time' => Carbon::now()->addDays(1)->addHours(1)
+            ],
+            [
+                'flight_code' => 'GA212',
+                'origin' => 'SUB',
+                'destination' => 'DPS',
+                'departure_time' => Carbon::now()->addDays(2),
+                'arrival_time' => Carbon::now()->addDays(2)->addHours(1)
+            ],
+            // Add 3 more flights
+        ];
+
+        foreach ($flights as $flight) {
+            Flight::create($flight);
+        }
+    }
+}
+```
+
+Run seeder:
+```bash
+php artisan db:seed --class=FlightSeeder
+```
+
+## 5. Views and Frontend Setup
+
+### Install Tailwind CSS
+```bash
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init
+```
+
+Configure `tailwind.config.js`:
+```js
+module.exports = {
+  content: [
+    "./resources/**/*.blade.php",
+    "./resources/**/*.js",
+    "./resources/**/*.vue",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+```
+
+Add Tailwind to `resources/css/app.css`:
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+### Create Layout Components
+
+#### Main Layout
+```php
+<!-- resources/views/layouts/app.blade.php -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airline Ticket Booking System</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body class="bg-gray-100">
+    @include('components.header')
+    
+    <main class="container mx-auto py-4">
+        @yield('content')
+    </main>
+    
+    @include('components.footer')
+</body>
+</html>
+```
+
+#### Header Component
+```php
+<!-- resources/views/components/header.blade.php -->
+<header class="bg-blue-600 text-white p-4 shadow-md">
+    <div class="container mx-auto flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Airline Ticket Booking System</h1>
+        <nav>
+            <a href="{{ route('flights.index') }}" class="hover:underline">Flights</a>
+        </nav>
+    </div>
+</header>
+```
+
+#### Footer Component
+```php
+<!-- resources/views/components/footer.blade.php -->
+<footer class="bg-gray-800 text-white p-4 mt-8">
+    <div class="container mx-auto text-center">
+        <p>by Web Framework and Deployment - 2024</p>
+    </div>
+</footer>
+```
+
+### Create Flight Views
+
+#### Flight Index View
+```php
+<!-- resources/views/flights/index.blade.php -->
+@extends('layouts.app')
+
+@section('content')
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    @foreach ($flights as $flight)
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-bold mb-2">{{ $flight->flight_code }} {{ $flight->origin }}->{{ $flight->destination }}</h2>
+            <p class="text-gray-600 mb-1">Departure: {{ $flight->departure_time->format('l, d F Y, H:i') }}</p>
+            <p class="text-gray-600 mb-4">Arrival: {{ $flight->arrival_time->format('l, d F Y, H:i') }}</p>
+            <div class="flex space-x-2">
+                <a href="{{ route('flights.book', $flight) }}" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Book Ticket</a>
+                <a href="{{ route('flights.tickets', $flight) }}" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">View Details</a>
+            </div>
+        </div>
+    @endforeach
+</div>
+@endsection
+```
+
+#### Booking Form View
+```php
+<!-- resources/views/tickets/create.blade.php -->
+@extends('layouts.app')
+
+@section('content')
+<div class="max-w-md mx-auto bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-xl font-bold mb-4">Ticket Booking for {{ $flight->flight_code }}</h2>
+    
+    <div class="mb-6">
+        <p>{{ $flight->origin }}->{{ $flight->destination }}</p>
+        <p>Departure: {{ $flight->departure_time->format('l, d F Y, H:i') }}</p>
+        <p>Arrival: {{ $flight->arrival_time->format('l, d F Y, H:i') }}</p>
+    </div>
+    
+    <form action="{{ route('tickets.store') }}" method="POST">
+        @csrf
+        <input type="hidden" name="flight_id" value="{{ $flight->id }}">
+        
+        <div class="mb-4">
+            <label for="passenger_name" class="block text-gray-700 mb-2">Passenger Name</label>
+            <input type="text" name="passenger_name" id="passenger_name" class="w-full px-3 py-2 border rounded" required>
+        </div>
+        
+        <div class="mb-4">
+            <label for="passenger_phone" class="block text-gray-700 mb-2">Passenger Phone</label>
+            <input type="text" name="passenger_phone" id="passenger_phone" class="w-full px-3 py-2 border rounded" required maxlength="14">
+        </div>
+        
+        <div class="mb-4">
+            <label for="seat_number" class="block text-gray-700 mb-2">Seat Number</label>
+            <input type="text" name="seat_number" id="seat_number" class="w-full px-3 py-2 border rounded" required maxlength="3">
+        </div>
+        
+        <div class="flex justify-end space-x-2">
+            <a href="{{ route('flights.index') }}" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Cancel</a>
+            <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Book Ticket</button>
+        </div>
+    </form>
+</div>
+@endsection
+```
+
+#### Ticket Details View
+```php
+<!-- resources/views/tickets/index.blade.php -->
+@extends('layouts.app')
+
+@section('content')
+<div class="bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-xl font-bold mb-4">Ticket Details for {{ $flight->flight_code }}</h2>
+    <p class="mb-2">{{ $flight->origin }}->{{ $flight->destination }}</p>
+    <p class="mb-2">Departure: {{ $flight->departure_time->format('l, d F Y, H:i') }}</p>
+    <p class="mb-4">Arrival: {{ $flight->arrival_time->format('l, d F Y, H:i') }}</p>
+    
+    <div class="mb-4">
+        <span class="font-semibold">{{ $tickets->count() }} passengers • {{ $tickets->where('is_boarding', true)->count() }} boardings</span>
+    </div>
+    
+    <div class="overflow-x-auto">
+        <table class="min-w-full bg-white">
+            <thead>
+                <tr>
+                    <th class="py-2 px-4 border-b">No.</th>
+                    <th class="py-2 px-4 border-b">Passenger Name</th>
+                    <th class="py-2 px-4 border-b">Passenger Phone</th>
+                    <th class="py-2 px-4 border-b">Seat Number</th>
+                    <th class="py-2 px-4 border-b">Boarding</th>
+                    <th class="py-2 px-4 border-b">Delete</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($tickets as $ticket)
+                <tr>
+                    <td class="py-2 px-4 border-b">{{ $loop->iteration }}</td>
+                    <td class="py-2 px-4 border-b">{{ $ticket->passenger_name }}</td>
+                    <td class="py-2 px-4 border-b">{{ $ticket->passenger_phone }}</td>
+                    <td class="py-2 px-4 border-b">{{ $ticket->seat_number }}</td>
+                    <td class="py-2 px-4 border-b">
+                        @if ($ticket->is_boarding)
+                            {{ $ticket->boarding_time->format('d-m-Y, H:i') }}
+                        @else
+                            <form action="{{ route('tickets.board', $ticket) }}" method="POST" class="inline">
+                                @csrf
+                                @method('PUT')
+                                <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600">Confirm</button>
+                            </form>
+                        @endif
+                    </td>
+                    <td class="py-2 px-4 border-b">
+                        @if (!$ticket->is_boarding)
+                            <form action="{{ route('tickets.destroy', $ticket) }}" method="POST" class="inline">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">Delete</button>
+                            </form>
+                        @endif
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+    
+    <div class="mt-4">
+        <a href="{{ route('flights.index') }}" class="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">Back</a>
+    </div>
+</div>
+@endsection
+```
+
+## 6. Controllers and Routing
+
+### Flight Controller
+```bash
+php artisan make:controller FlightController
+```
+
+```php
+// app/Http/Controllers/FlightController.php
+namespace App\Http\Controllers;
+
+use App\Models\Flight;
+use Illuminate\Http\Request;
+
+class FlightController extends Controller
+{
+    public function index()
+    {
+        $flights = Flight::all();
+        return view('flights.index', compact('flights'));
+    }
+
+    public function showTickets(Flight $flight)
+    {
+        $tickets = $flight->tickets;
+        return view('tickets.index', compact('flight', 'tickets'));
+    }
+
+    public function showBookingForm(Flight $flight)
+    {
+        return view('tickets.create', compact('flight'));
+    }
+}
+```
+
+### Ticket Controller
+```bash
+php artisan make:controller TicketController
+```
+
+```php
+// app/Http/Controllers/TicketController.php
+namespace App\Http\Controllers;
+
+use App\Models\Ticket;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
+
+class TicketController extends Controller
+{
+    public function store(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'flight_id' => 'required|exists:flights,id',
+            'passenger_name' => 'required|string|max:255',
+            'passenger_phone' => 'required|string|max:14',
+            'seat_number' => 'required|string|max:3',
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        Ticket::create($validator->validated());
+
+        return redirect()->route('flights.index')
+            ->with('success', 'Ticket booked successfully!');
+    }
+
+    public function board(Ticket $ticket)
+    {
+        $ticket->update([
+            'is_boarding' => true,
+            'boarding_time' => now()
+        ]);
+
+        return redirect()->back()
+            ->with('success', 'Boarding confirmed!');
+    }
+
+    public function destroy(Ticket $ticket)
+    {
+        if ($ticket->is_boarding) {
+            return redirect()->back()
+                ->with('error', 'Cannot delete ticket that has been boarded');
+        }
+
+        $ticket->delete();
+
+        return redirect()->back()
+            ->with('success', 'Ticket deleted successfully!');
+    }
+}
+```
+
+### Routes
+```php
+// routes/web.php
+use App\Http\Controllers\FlightController;
+use App\Http\Controllers\TicketController;
+
+Route::get('/flights', [FlightController::class, 'index'])->name('flights.index');
+Route::get('/flights/ticket/{flight}', [FlightController::class, 'showTickets'])->name('flights.tickets');
+Route::get('/flights/book/{flight}', [FlightController::class, 'showBookingForm'])->name('flights.book');
+
+Route::post('/ticket/submit', [TicketController::class, 'store'])->name('tickets.store');
+Route::put('/ticket/board/{ticket}', [TicketController::class, 'board'])->name('tickets.board');
+Route::delete('/ticket/delete/{ticket}', [TicketController::class, 'destroy'])->name('tickets.destroy');
+```
+
+## 7. Form Handling and CSRF Protection
+
+All forms in the views already include CSRF protection with `@csrf` directive. The controllers handle form submissions with proper validation and error handling.
+
+## 8. Validation and Error Handling
+
+### Success/Error Messages
+Add this to your main layout file (app.blade.php) before the content section:
+```php
+@if(session('success'))
+    <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
+        <span class="block sm:inline">{{ session('success') }}</span>
+    </div>
+@endif
+
+@if(session('error'))
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+        <span class="block sm:inline">{{ session('error') }}</span>
+    </div>
+@endif
+
+@if($errors->any())
+    <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4" role="alert">
+        <ul>
+            @foreach ($errors->all() as $error)
+                <li>{{ $error }}</li>
+            @endforeach
+        </ul>
+    </div>
+@endif
+```
+
+### Additional Validation
+The TicketController already includes validation for the ticket booking form. The boarding and deletion actions include checks to prevent invalid operations.
+
+## Final Steps
+
+1. Build assets:
+```bash
+npm run build
+```
+
+2. Start development server:
+```bash
+php artisan serve
+```
+
+This implementation covers all the requirements specified in the system specification, including:
+- Laravel installation and database setup
+- Database migrations and models with relationships
+- Seeders for initial data
+- Views with Tailwind CSS styling
+- Controllers with all required functionality
+- Routing for all specified endpoints
+- Form handling with CSRF protection
+- Validation and error handling
+- Boarding confirmation and ticket deletion with proper restrictions
+
+
+# Fixing "Call to a member function format() on string" Error
+
+This error occurs when you're trying to call the `format()` method on a string, but the `departure_time` is being treated as a string instead of a Carbon date object.
+
+## Solution Options:
+
+### 1. Cast the field to datetime in your Flight model:
+
+```php
+// app/Models/Flight.php
+protected $casts = [
+    'departure_time' => 'datetime',
+    'arrival_time' => 'datetime',
+    // other fields...
+];
+```
+
+### 2. Convert the string to Carbon instance in your view:
+
+```php
+<p class="text-gray-600 mb-1">Departure: {{ \Carbon\Carbon::parse($flight->departure_time)->format('l, d F Y, H:i') }}</p>
+```
+
+### 3. If using Laravel's automatic date casting (Laravel 7+):
+
+Make sure your migration defines the fields as `dateTime`:
+
+```php
+// In your migration file
+$table->dateTime('departure_time');
+$table->dateTime('arrival_time');
+```
+
+### 4. Best Practice: Handle in Controller
+
+Prepare the formatted dates in your controller:
+
+```php
+// In your controller
+public function index()
+{
+    $flights = Flight::all()->map(function ($flight) {
+        $flight->formatted_departure = $flight->departure_time->format('l, d F Y, H:i');
+        $flight->formatted_arrival = $flight->arrival_time->format('l, d F Y, H:i');
+        return $flight;
+    });
+    
+    return view('flights.index', compact('flights'));
+}
+```
+
+Then in your view:
+```php
+<p class="text-gray-600 mb-1">Departure: {{ $flight->formatted_departure }}</p>
+<p class="text-gray-600 mb-4">Arrival: {{ $flight->formatted_arrival }}</p>
+```
+
+## Why This Happens:
+
+1. **Database returns strings**: By default, dates from the database are returned as strings
+2. **Missing $casts**: Without the `$casts` property, Laravel doesn't automatically convert to Carbon
+3. **Migration type**: If you used `string` instead of `dateTime` in migration
+
+## Complete Fix Recommendation:
+
+1. **Update your Flight model**:
+```php
+// app/Models/Flight.php
+protected $casts = [
+    'departure_time' => 'datetime',
+    'arrival_time' => 'datetime',
+    'created_at' => 'datetime',
+    'updated_at' => 'datetime'
+];
+```
+
+2. **Keep your view simple**:
+```php
+<p class="text-gray-600 mb-1">Departure: {{ $flight->departure_time->format('l, d F Y, H:i') }}</p>
+<p class="text-gray-600 mb-4">Arrival: {{ $flight->arrival_time->format('l, d F Y, H:i') }}</p>
+```
+
+3. **Verify your migration** (optional):
+```bash
+php artisan make:migration update_flights_table_dates --table=flights
+```
+
+```php
+// In the new migration
+public function up()
+{
+    Schema::table('flights', function (Blueprint $table) {
+        $table->dateTime('departure_time')->change();
+        $table->dateTime('arrival_time')->change();
+    });
+}
+```
+
+After making these changes, the error should be resolved and your dates will format properly.
+
+# **Laravel Airline Ticket Booking System - Complete Implementation**
+
+I'll guide you through creating a complete **Airline Ticket Booking System** from scratch with all the required features.
+
+---
+
+## **1. Project Setup**
+
+### **1.1 Install Laravel**
+```bash
+composer create-project laravel/laravel airline
+cd airline
+```
+
+### **1.2 Configure Database**
+- Create a MySQL database named `airline_ticket_db`
+- Update `.env`:
+  ```env
+  DB_CONNECTION=mysql
+  DB_HOST=127.0.0.1
+  DB_PORT=3306
+  DB_DATABASE=airline_ticket_db
+  DB_USERNAME=root
+  DB_PASSWORD=
+  ```
+
+### **1.3 Install Tailwind CSS**
+```bash
+npm install -D tailwindcss postcss autoprefixer
+npx tailwindcss init
+```
+
+Update `tailwind.config.js`:
+```js
+module.exports = {
+  content: [
+    "./resources/**/*.blade.php",
+    "./resources/**/*.js",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+```
+
+Add to `resources/css/app.css`:
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+---
+
+## **2. Database Migrations**
+
+### **2.1 Create Flights Table**
+```bash
+php artisan make:migration create_flights_table
+```
+
+```php
+// database/migrations/YYYY_MM_DD_create_flights_table.php
+Schema::create('flights', function (Blueprint $table) {
+    $table->id();
+    $table->string('flight_code', 5)->unique();
+    $table->string('origin', 3);
+    $table->string('destination', 3);
+    $table->dateTime('departure_time');
+    $table->dateTime('arrival_time');
+    $table->timestamps();
+});
+```
+
+### **2.2 Create Tickets Table**
+```bash
+php artisan make:migration create_tickets_table
+```
+
+```php
+// database/migrations/YYYY_MM_DD_create_tickets_table.php
+Schema::create('tickets', function (Blueprint $table) {
+    $table->id();
+    $table->foreignId('flight_id')->constrained();
+    $table->string('passenger_name');
+    $table->string('passenger_phone', 14);
+    $table->string('seat_number', 3);
+    $table->boolean('is_boarding')->default(false);
+    $table->dateTime('boarding_time')->nullable();
+    $table->timestamps();
+});
+```
+
+Run migrations:
+```bash
+php artisan migrate
+```
+
+---
+
+## **3. Models & Relationships**
+
+### **3.1 Flight Model**
+```bash
+php artisan make:model Flight
+```
+
+```php
+// app/Models/Flight.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Flight extends Model
+{
+    protected $fillable = [
+        'flight_code', 
+        'origin', 
+        'destination', 
+        'departure_time', 
+        'arrival_time'
+    ];
+
+    protected $casts = [
+        'departure_time' => 'datetime',
+        'arrival_time' => 'datetime',
+    ];
+
+    public function tickets(): HasMany
+    {
+        return $this->hasMany(Ticket::class);
+    }
+}
+```
+
+### **3.2 Ticket Model**
+```bash
+php artisan make:model Ticket
+```
+
+```php
+// app/Models/Ticket.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class Ticket extends Model
+{
+    protected $fillable = [
+        'flight_id',
+        'passenger_name',
+        'passenger_phone',
+        'seat_number',
+        'is_boarding',
+        'boarding_time'
+    ];
+
+    protected $casts = [
+        'boarding_time' => 'datetime',
+    ];
+
+    public function flight(): BelongsTo
+    {
+        return $this->belongsTo(Flight::class);
+    }
+}
+```
+
+---
+
+## **4. Database Seeding**
+
+### **4.1 Flight Seeder**
+```bash
+php artisan make:seeder FlightSeeder
+```
+
+```php
+// database/seeders/FlightSeeder.php
+use App\Models\Flight;
+use Carbon\Carbon;
+
+public function run()
+{
+    $flights = [
+        [
+            'flight_code' => 'JT610',
+            'origin' => 'SUB',
+            'destination' => 'CGK',
+            'departure_time' => Carbon::now()->addDays(1),
+            'arrival_time' => Carbon::now()->addDays(1)->addHours(1)
+        ],
+        // Add 4 more flights
+    ];
+
+    Flight::insert($flights);
+}
+```
+
+Run seeder:
+```bash
+php artisan db:seed --class=FlightSeeder
+```
+
+---
+
+## **5. Controllers & Routing**
+
+### **5.1 FlightController**
+```bash
+php artisan make:controller FlightController
+```
+
+```php
+// app/Http/Controllers/FlightController.php
+namespace App\Http\Controllers;
+
+use App\Models\Flight;
+
+class FlightController extends Controller
+{
+    public function index()
+    {
+        $flights = Flight::all();
+        return view('flights.index', compact('flights'));
+    }
+
+    public function showTickets(Flight $flight)
+    {
+        $tickets = $flight->tickets;
+        return view('tickets.index', compact('flight', 'tickets'));
+    }
+
+    public function showBookingForm(Flight $flight)
+    {
+        return view('tickets.create', compact('flight'));
+    }
+}
+```
+
+### **5.2 TicketController**
+```bash
+php artisan make:controller TicketController
+```
+
+```php
+// app/Http/Controllers/TicketController.php
+namespace App\Http\Controllers;
+
+use App\Models\Ticket;
+use Illuminate\Http\Request;
+
+class TicketController extends Controller
+{
+    public function store(Request $request)
+    {
+        $request->validate([
+            'flight_id' => 'required|exists:flights,id',
+            'passenger_name' => 'required|string|max:255',
+            'passenger_phone' => 'required|string|max:14',
+            'seat_number' => 'required|string|max:3|unique:tickets,seat_number,NULL,id,flight_id,'.$request->flight_id,
+        ]);
+
+        Ticket::create($request->all());
+
+        return redirect()->route('flights.index')
+            ->with('success', 'Ticket booked successfully!');
+    }
+
+    public function board(Ticket $ticket)
+    {
+        $ticket->update([
+            'is_boarding' => true,
+            'boarding_time' => now()
+        ]);
+
+        return back()->with('success', 'Boarding confirmed!');
+    }
+
+    public function destroy(Ticket $ticket)
+    {
+        if ($ticket->is_boarding) {
+            return back()->with('error', 'Cannot delete boarded ticket!');
+        }
+
+        $ticket->delete();
+        return back()->with('success', 'Ticket deleted!');
+    }
+}
+```
+
+### **5.3 Routes**
+```php
+// routes/web.php
+use App\Http\Controllers\FlightController;
+use App\Http\Controllers\TicketController;
+
+Route::get('/flights', [FlightController::class, 'index'])->name('flights.index');
+Route::get('/flights/ticket/{flight}', [FlightController::class, 'showTickets'])->name('flights.tickets');
+Route::get('/flights/book/{flight}', [FlightController::class, 'showBookingForm'])->name('flights.book');
+
+Route::post('/ticket/submit', [TicketController::class, 'store'])->name('tickets.store');
+Route::put('/ticket/board/{ticket}', [TicketController::class, 'board'])->name('tickets.board');
+Route::delete('/ticket/delete/{ticket}', [TicketController::class, 'destroy'])->name('tickets.destroy');
+```
+
+---
+
+## **6. Views with Tailwind CSS**
+
+### **6.1 Layout (app.blade.php)**
+```php
+<!-- resources/views/layouts/app.blade.php -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airline Booking</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body class="bg-gray-100">
+    <header class="bg-blue-600 text-white p-4 shadow">
+        <div class="container mx-auto">
+            <h1 class="text-2xl font-bold">Airline Booking System</h1>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4">
+        @if(session('success'))
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                {{ session('success') }}
+            </div>
+        @endif
+
+        @if(session('error'))
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                {{ session('error') }}
+            </div>
+        @endif
+
+        @yield('content')
+    </main>
+
+    <footer class="bg-gray-800 text-white p-4 mt-8">
+        <div class="container mx-auto text-center">
+            <p>© 2024 Airline Booking System</p>
+        </div>
+    </footer>
+</body>
+</html>
+```
+
+### **6.2 Flight Index (flights/index.blade.php)**
+```php
+<!-- resources/views/flights/index.blade.php -->
+@extends('layouts.app')
+
+@section('content')
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    @foreach ($flights as $flight)
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-bold">{{ $flight->flight_code }} ({{ $flight->origin }} → {{ $flight->destination }})</h2>
+            <p class="text-gray-600 mt-2">Departure: {{ $flight->departure_time->format('l, d F Y, H:i') }}</p>
+            <p class="text-gray-600">Arrival: {{ $flight->arrival_time->format('l, d F Y, H:i') }}</p>
+            
+            <div class="mt-4 flex space-x-2">
+                <a href="{{ route('flights.book', $flight) }}" 
+                   class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                   Book Ticket
+                </a>
+                <a href="{{ route('flights.tickets', $flight) }}" 
+                   class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                   View Tickets
+                </a>
+            </div>
+        </div>
+    @endforeach
+</div>
+@endsection
+```
+
+### **6.3 Ticket Booking Form (tickets/create.blade.php)**
+```php
+<!-- resources/views/tickets/create.blade.php -->
+@extends('layouts.app')
+
+@section('content')
+<div class="max-w-md mx-auto bg-white rounded-lg shadow p-6">
+    <h2 class="text-xl font-bold mb-4">Book Ticket for {{ $flight->flight_code }}</h2>
+    
+    <form action="{{ route('tickets.store') }}" method="POST">
+        @csrf
+        <input type="hidden" name="flight_id" value="{{ $flight->id }}">
+
+        <div class="mb-4">
+            <label class="block text-gray-700 mb-2">Passenger Name</label>
+            <input type="text" name="passenger_name" class="w-full p-2 border rounded" required>
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-gray-700 mb-2">Passenger Phone</label>
+            <input type="text" name="passenger_phone" class="w-full p-2 border rounded" required maxlength="14">
+        </div>
+
+        <div class="mb-4">
+            <label class="block text-gray-700 mb-2">Seat Number</label>
+            <input type="text" name="seat_number" class="w-full p-2 border rounded" required maxlength="3">
+        </div>
+
+        <div class="flex justify-end space-x-2">
+            <a href="{{ route('flights.index') }}" class="bg-gray-500 text-white px-4 py-2 rounded">Cancel</a>
+            <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Book Ticket</button>
+        </div>
+    </form>
+</div>
+@endsection
+```
+
+### **6.4 Ticket List (tickets/index.blade.php)**
+```php
+<!-- resources/views/tickets/index.blade.php -->
+@extends('layouts.app')
+
+@section('content')
+<div class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-xl font-bold mb-4">Tickets for {{ $flight->flight_code }}</h2>
+    
+    <div class="overflow-x-auto">
+        <table class="min-w-full">
+            <thead>
+                <tr class="bg-gray-100">
+                    <th class="px-4 py-2">Passenger</th>
+                    <th class="px-4 py-2">Phone</th>
+                    <th class="px-4 py-2">Seat</th>
+                    <th class="px-4 py-2">Boarding</th>
+                    <th class="px-4 py-2">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($tickets as $ticket)
+                <tr>
+                    <td class="px-4 py-2">{{ $ticket->passenger_name }}</td>
+                    <td class="px-4 py-2">{{ $ticket->passenger_phone }}</td>
+                    <td class="px-4 py-2">{{ $ticket->seat_number }}</td>
+                    <td class="px-4 py-2">
+                        @if($ticket->is_boarding)
+                            {{ $ticket->boarding_time->format('H:i') }}
+                        @else
+                            <form action="{{ route('tickets.board', $ticket) }}" method="POST">
+                                @csrf
+                                @method('PUT')
+                                <button type="submit" class="bg-green-500 text-white px-3 py-1 rounded">Confirm</button>
+                            </form>
+                        @endif
+                    </td>
+                    <td class="px-4 py-2">
+                        @if(!$ticket->is_boarding)
+                            <form action="{{ route('tickets.destroy', $ticket) }}" method="POST">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="bg-red-500 text-white px-3 py-1 rounded">Delete</button>
+                            </form>
+                        @endif
+                    </td>
+                </tr>
+                @endforeach
+            </tbody>
+        </table>
+    </div>
+
+    <div class="mt-4">
+        <a href="{{ route('flights.index') }}" class="bg-gray-500 text-white px-4 py-2 rounded">Back</a>
+    </div>
+</div>
+@endsection
+```
+
+---
+
+## **7. Run the Application**
+
+```bash
+npm run dev
+php artisan serve
+```
+
+Visit `http://127.0.0.1:8000/flights` to see the application in action!
+
+---
+
+## **Summary**
+
+✅ **Complete Laravel 12 setup**  
+✅ **Database migrations & models**  
+✅ **Controllers with proper error handling**  
+✅ **Tailwind CSS styling**  
+✅ **All required features implemented**  
+
+This implementation covers all requirements from the specification, including:
+- Flight listing
+- Ticket booking
+- Boarding confirmation
+- Ticket deletion (only if not boarded)
+- Proper validation and error handling
+- Responsive design with Tailwind CSS
+
+Let me know if you need any modifications! 🚀
+
+# Complete Ticket Booking System with Create Form and Routes
+
+Here's the complete implementation for the ticket creation functionality, including the create form and all necessary routes:
+
+## 1. Update TicketController (Add Create Method)
+
+```php
+// app/Http/Controllers/TicketController.php
+namespace App\Http\Controllers;
+
+use App\Models\Ticket;
+use App\Models\Flight;
+use Illuminate\Http\Request;
+
+class TicketController extends Controller
+{
+    /**
+     * Show the form for creating a new ticket
+     */
+    public function create(Flight $flight)
+    {
+        return view('tickets.create', [
+            'flight' => $flight,
+            'availableSeats' => $this->getAvailableSeats($flight)
+        ]);
+    }
+
+    /**
+     * Store a newly created ticket
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'flight_id' => 'required|exists:flights,id',
+            'passenger_name' => 'required|string|max:255',
+            'passenger_phone' => 'required|string|max:14|regex:/^[0-9]+$/',
+            'seat_number' => [
+                'required',
+                'string',
+                'max:3',
+                'regex:/^[A-Z][0-9]{2}$/',
+                Rule::unique('tickets')->where(function ($query) use ($request) {
+                    return $query->where('flight_id', $request->flight_id);
+                })
+            ],
+        ], [
+            'seat_number.regex' => 'Seat number must be in format A01 (letter followed by two digits)',
+            'seat_number.unique' => 'This seat is already taken for this flight',
+            'passenger_phone.regex' => 'Phone number must contain only numbers'
+        ]);
+
+        $ticket = Ticket::create($validated);
+
+        return redirect()
+            ->route('flights.tickets', $ticket->flight_id)
+            ->with('success', "Ticket for {$ticket->passenger_name} created successfully!");
+    }
+
+    /**
+     * Get available seats for a flight
+     */
+    private function getAvailableSeats(Flight $flight): array
+    {
+        $takenSeats = $flight->tickets->pluck('seat_number')->toArray();
+        $allSeats = [];
+        
+        // Generate all possible seats (A01 to Z99)
+        foreach (range('A', 'Z') as $row) {
+            foreach (range(1, 99) as $num) {
+                $allSeats[] = $row . str_pad($num, 2, '0', STR_PAD_LEFT);
+            }
+        }
+        
+        return array_diff($allSeats, $takenSeats);
+    }
+}
+```
+
+## 2. Complete Create Blade Template
+
+```php
+<!-- resources/views/tickets/create.blade.php -->
+@extends('layouts.app')
+
+@section('content')
+<div class="max-w-md mx-auto bg-white rounded-lg shadow-md overflow-hidden">
+    <div class="bg-blue-600 text-white px-6 py-4">
+        <h1 class="text-xl font-bold">Book Ticket for {{ $flight->flight_code }}</h1>
+        <p class="text-sm">{{ $flight->origin }} → {{ $flight->destination }}</p>
+    </div>
+    
+    <div class="p-6">
+        <div class="mb-4">
+            <p class="font-medium">Flight Details:</p>
+            <p>Departure: {{ $flight->departure_time->format('l, d F Y, H:i') }}</p>
+            <p>Arrival: {{ $flight->arrival_time->format('l, d F Y, H:i') }}</p>
+        </div>
+
+        <form action="{{ route('tickets.store') }}" method="POST">
+            @csrf
+            <input type="hidden" name="flight_id" value="{{ $flight->id }}">
+
+            <div class="mb-4">
+                <label for="passenger_name" class="block text-gray-700 font-medium mb-2">Passenger Name</label>
+                <input type="text" name="passenger_name" id="passenger_name" 
+                       class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       required autofocus>
+                @error('passenger_name')
+                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <div class="mb-4">
+                <label for="passenger_phone" class="block text-gray-700 font-medium mb-2">Passenger Phone</label>
+                <input type="text" name="passenger_phone" id="passenger_phone" 
+                       class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       required placeholder="081234567890">
+                @error('passenger_phone')
+                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <div class="mb-6">
+                <label for="seat_number" class="block text-gray-700 font-medium mb-2">Seat Number</label>
+                <select name="seat_number" id="seat_number" 
+                        class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    <option value="">Select a seat</option>
+                    @foreach($availableSeats as $seat)
+                        <option value="{{ $seat }}">{{ $seat }}</option>
+                    @endforeach
+                </select>
+                @error('seat_number')
+                    <p class="text-red-500 text-sm mt-1">{{ $message }}</p>
+                @enderror
+            </div>
+
+            <div class="flex justify-end space-x-3">
+                <a href="{{ route('flights.index') }}" 
+                   class="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition">
+                   Cancel
+                </a>
+                <button type="submit" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                    Book Ticket
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+@endsection
+```
+
+## 3. Update Routes
+
+```php
+// routes/web.php
+use App\Http\Controllers\FlightController;
+use App\Http\Controllers\TicketController;
+
+// Flight routes
+Route::get('/flights', [FlightController::class, 'index'])->name('flights.index');
+Route::get('/flights/{flight}/tickets', [FlightController::class, 'showTickets'])->name('flights.tickets');
+Route::get('/flights/{flight}/book', [TicketController::class, 'create'])->name('tickets.create');
+
+// Ticket routes
+Route::post('/tickets', [TicketController::class, 'store'])->name('tickets.store');
+Route::put('/tickets/{ticket}/board', [TicketController::class, 'board'])->name('tickets.board');
+Route::delete('/tickets/{ticket}', [TicketController::class, 'destroy'])->name('tickets.destroy');
+```
+
+## 4. Update FlightController (showTickets method)
+
+```php
+// app/Http/Controllers/FlightController.php
+public function showTickets(Flight $flight)
+{
+    $tickets = $flight->tickets()
+        ->orderBy('is_boarding', 'desc')
+        ->orderBy('created_at', 'asc')
+        ->get();
+
+    return view('tickets.index', [
+        'flight' => $flight,
+        'tickets' => $tickets,
+        'passengerCount' => $tickets->count(),
+        'boardingCount' => $tickets->where('is_boarding', true)->count()
+    ]);
+}
+```
+
+## 5. Update Tickets Index View
+
+```php
+<!-- resources/views/tickets/index.blade.php -->
+@extends('layouts.app')
+
+@section('content')
+<div class="bg-white rounded-lg shadow-md overflow-hidden">
+    <div class="bg-blue-600 text-white px-6 py-4">
+        <h1 class="text-xl font-bold">Ticket Details for {{ $flight->flight_code }}</h1>
+        <p class="text-sm">{{ $passengerCount }} passengers • {{ $boardingCount }} boardings</p>
+    </div>
+
+    <div class="p-6">
+        <div class="mb-6">
+            <p class="font-medium">Flight Details:</p>
+            <p>{{ $flight->origin }} → {{ $flight->destination }}</p>
+            <p>Departure: {{ $flight->departure_time->format('l, d F Y, H:i') }}</p>
+            <p>Arrival: {{ $flight->arrival_time->format('l, d F Y, H:i') }}</p>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Passenger</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Seat</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Boarding</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    @foreach ($tickets as $ticket)
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap">{{ $ticket->passenger_name }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">{{ $ticket->passenger_phone }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">{{ $ticket->seat_number }}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            @if($ticket->is_boarding)
+                                <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                    Boarded at {{ $ticket->boarding_time->format('H:i') }}
+                                </span>
+                            @else
+                                <form action="{{ route('tickets.board', $ticket) }}" method="POST">
+                                    @csrf
+                                    @method('PUT')
+                                    <button type="submit" class="text-blue-600 hover:text-blue-900">Confirm Boarding</button>
+                                </form>
+                            @endif
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            @if(!$ticket->is_boarding)
+                                <form action="{{ route('tickets.destroy', $ticket) }}" method="POST">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="text-red-600 hover:text-red-900">Delete</button>
+                                </form>
+                            @endif
+                        </td>
+                    </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-6">
+            <a href="{{ route('flights.index') }}" class="text-blue-600 hover:text-blue-900">← Back to Flights</a>
+        </div>
+    </div>
+</div>
+@endsection
+```
+
+## Key Features of This Implementation:
+
+1. **Complete Ticket Booking Form**:
+   - Dynamic seat selection showing only available seats
+   - Real-time validation
+   - Clean, user-friendly interface
+
+2. **Enhanced Routing**:
+   - RESTful resource naming
+   - Proper parameter binding
+   - Clear route names
+
+3. **Improved Validation**:
+   - Phone number format validation
+   - Seat number format validation (A01 pattern)
+   - Unique seat per flight validation
+
+4. **Better User Experience**:
+   - Success/error messages
+   - Form field validation errors
+   - Consistent styling with Tailwind CSS
+
+5. **Business Logic**:
+   - Prevents double booking of seats
+   - Only shows available seats
+   - Proper boarding status management
+
+To use this system:
+1. Visit `/flights` to see available flights
+2. Click "Book Ticket" on a flight
+3. Fill out the form with passenger details
+4. Submit to create the ticket
+5. Manage tickets from the flight details page

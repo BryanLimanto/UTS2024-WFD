@@ -1,0 +1,259 @@
+# Migration dan Model untuk Sistem Pembelian
+
+Berikut adalah implementasi lengkap untuk migration dan model yang Anda butuhkan:
+
+## 1. Migration untuk Tabel Pelanggan
+
+```bash
+php artisan make:migration create_pelanggans_table
+```
+
+```php
+// database/migrations/[timestamp]_create_pelanggans_table.php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('pelanggans', function (Blueprint $table) {
+            $table->id();
+            $table->string('nama', 100);
+            $table->integer('tahun_masuk');
+            $table->date('tgl_lahir');
+            $table->text('alamat');
+            $table->string('notelp', 16);
+            $table->boolean('is_aktif')->default(false);
+            $table->timestamps();
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('pelanggans');
+    }
+};
+```
+
+## 2. Model Pelanggan
+
+```bash
+php artisan make:model Pelanggan
+```
+
+```php
+// app/Models/Pelanggan.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Pelanggan extends Model
+{
+    protected $table = 'pelanggans';
+    
+    protected $fillable = [
+        'nama',
+        'tahun_masuk',
+        'tgl_lahir',
+        'alamat',
+        'notelp',
+        'is_aktif'
+    ];
+
+    protected $casts = [
+        'tgl_lahir' => 'date',
+        'is_aktif' => 'boolean'
+    ];
+
+    public function pembelians(): HasMany
+    {
+        return $this->hasMany(Pembelian::class);
+    }
+}
+```
+
+## 3. Migration untuk Tabel Pembelian
+
+```bash
+php artisan make:migration create_pembelians_table
+```
+
+```php
+// database/migrations/[timestamp]_create_pembelians_table.php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('pembelians', function (Blueprint $table) {
+            $table->id();
+            $table->string('nomor_pembelian')->unique();
+            $table->date('tanggal');
+            $table->foreignId('pelanggan_id')->constrained('pelanggans')->onDelete('cascade');
+            $table->timestamps();
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('pembelians');
+    }
+};
+```
+
+## 4. Model Pembelian
+
+```bash
+php artisan make:model Pembelian
+```
+
+```php
+// app/Models/Pembelian.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Pembelian extends Model
+{
+    protected $fillable = [
+        'nomor_pembelian',
+        'tanggal',
+        'pelanggan_id'
+    ];
+
+    protected $casts = [
+        'tanggal' => 'date'
+    ];
+
+    public function pelanggan(): BelongsTo
+    {
+        return $this->belongsTo(Pelanggan::class);
+    }
+
+    public function details(): HasMany
+    {
+        return $this->hasMany(PembelianDetail::class);
+    }
+}
+```
+
+## 5. Migration untuk Tabel Pembelian Detail
+
+```bash
+php artisan make:migration create_pembelian_details_table
+```
+
+```php
+// database/migrations/[timestamp]_create_pembelian_details_table.php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('pembelian_details', function (Blueprint $table) {
+            $table->id();
+            $table->string('nama_barang', 100);
+            $table->unsignedTinyInteger('kuantitas');
+            $table->float('harga');
+            $table->foreignId('pembelian_id')->constrained('pembelians')->onDelete('cascade');
+            $table->timestamps();
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('pembelian_details');
+    }
+};
+```
+
+## 6. Model PembelianDetail
+
+```bash
+php artisan make:model PembelianDetail
+```
+
+```php
+// app/Models/PembelianDetail.php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class PembelianDetail extends Model
+{
+    protected $table = 'pembelian_details';
+    
+    protected $fillable = [
+        'nama_barang',
+        'kuantitas',
+        'harga',
+        'pembelian_id'
+    ];
+
+    public function pembelian(): BelongsTo
+    {
+        return $this->belongsTo(Pembelian::class);
+    }
+
+    // Accessor untuk menghitung subtotal
+    public function getSubtotalAttribute()
+    {
+        return $this->kuantitas * $this->harga;
+    }
+}
+```
+
+## Cara Menggunakan Migrations
+
+1. Jalankan semua migrations:
+```bash
+php artisan migrate
+```
+
+2. Jika perlu rollback:
+```bash
+php artisan migrate:rollback
+```
+
+## Relasi yang Terbentuk:
+
+1. **Pelanggan**:
+   - Memiliki banyak **Pembelian** (`hasMany`)
+
+2. **Pembelian**:
+   - Dimiliki oleh satu **Pelanggan** (`belongsTo`)
+   - Memiliki banyak **PembelianDetail** (`hasMany`)
+
+3. **PembelianDetail**:
+   - Dimiliki oleh satu **Pembelian** (`belongsTo`)
+
+## Fitur Tambahan:
+
+1. **Casting Data**:
+   - Tanggal otomatis di-cast ke Carbon instance
+   - Boolean untuk status aktif
+
+2. **Soft Delete** (Opsional):
+   - Tambahkan `use SoftDeletes` di model jika ingin fitur soft delete
+
+3. **Subtotal Accessor**:
+   - Pada PembelianDetail ada accessor untuk menghitung subtotal
+
+4. **Cascade Delete**:
+   - Data detail akan terhapus jika pembelian dihapus
+   - Pembelian akan terhapus jika pelanggan dihapus
+
+   username = BryanLimanto
+   pw = Bryan260804
